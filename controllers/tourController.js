@@ -30,16 +30,30 @@ exports.getAllTours = async (req, res) => {
         // 2. Advanced filtering
         let queryStr = JSON.stringify(queryObj);
         queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, match => `$${match}`);
-        // console.log(JSON.parse(queryStr));
 
-        const query = await Tour.find(JSON.parse(queryStr));
+        let query = await Tour.find(JSON.parse(queryStr));
 
-        // const query = Tour.find()
-        //     .where('duration')
-        //     .equals(5)
-        //     .where('difficulty')
-        //     .equals('easy');
+        // 3. Sorting
+        if (req.query.sort) {
+            const sortFields = req.query.sort.split(',');
+            const sortOrder = sortFields.map((field) => field.startsWith('-') ? -1 : 1);
 
+            query = query.sort((a, b) => {
+                for (let i = 0; i < sortFields.length; i++) {
+                    const field = sortFields[i].replace(/^-/, ''); // Removing the leading '-' if present
+                    const order = sortOrder[i];
+
+                    if (a[field] === b[field]) {
+                        continue; // If current fields are equal, move to the next field
+                    }
+                    return (a[field] - b[field]) * order; // Applying sort order to the comparison
+                }
+            });
+        } else { // If user does not specify the sort field, sort by the tour created time in descending order
+            query = query.sort((a, b) => {
+                b[createdAt] - a[createdAt];
+            })
+        };
 
         // Execute query
         const tours = await query;
