@@ -1,5 +1,13 @@
+const { request } = require('../app');
 const Tour = require('../models/tourModel');
+const APIFeatures = require('../utils/apiFeatures');
 
+exports.aliasTopTours = (req, res, next) => {
+    req.query.limit = '5';
+    req.query.sort = '-ratingAverage, price';
+    req.query.fields = 'name, price, ratingAverage, summary, difficulty';
+    next();
+};
 
 exports.createTour = async (req, res) => {
     try {
@@ -21,44 +29,13 @@ exports.createTour = async (req, res) => {
 
 exports.getAllTours = async (req, res) => {
     try {
-        // Build query
-        // 1. Filtering
-        const queryObj = { ...req.query }; // create a new query object, not the refernce
-        const excludedFields = ['page', 'sort', 'limit', 'fields'];
-        excludedFields.forEach(el => delete queryObj[el]);
+        const features = new APIFeatures(Tour.find(), req.query)
+            .filter()
+            .sort()
+            .limitFields()
+            .paginate();
+        const tours = await features.query;
 
-        // 2. Advanced filtering
-        let queryStr = JSON.stringify(queryObj);
-        queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, match => `$${match}`);
-
-        let query = await Tour.find(JSON.parse(queryStr));
-
-        // 3. Sorting
-        if (req.query.sort) {
-            const sortFields = req.query.sort.split(',');
-            const sortOrder = sortFields.map((field) => field.startsWith('-') ? -1 : 1);
-
-            query = query.sort((a, b) => {
-                for (let i = 0; i < sortFields.length; i++) {
-                    const field = sortFields[i].replace(/^-/, ''); // Removing the leading '-' if present
-                    const order = sortOrder[i];
-
-                    if (a[field] === b[field]) {
-                        continue; // If current fields are equal, move to the next field
-                    }
-                    return (a[field] - b[field]) * order; // Applying sort order to the comparison
-                }
-            });
-        } else { // If user does not specify the sort field, sort by the tour created time in descending order
-            query = query.sort((a, b) => {
-                b[createdAt] - a[createdAt];
-            })
-        };
-
-        // Execute query
-        const tours = await query;
-
-        // Send response
         res.status(200).json({
             status: 'success',
             results: tours.length,
